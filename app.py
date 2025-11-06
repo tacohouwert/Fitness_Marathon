@@ -253,23 +253,23 @@ personal_profile = {
     "extra_constraints": other_constraints,
 }
 
-# =========[ ChatGPT-advies genereren ]=========
+
 # =========[ Advies genereren (knop) ]=========
 st.markdown("---")
 generate = st.button("🧠 Advies genereren")
 
 if generate:
-    # Afgeleide waarden die dit script nog niet had gezet
-    weeks_to_go = (marathon_date - datetime.now().date()).days // 7
-    today_str = datetime.now(timezone.utc).date().isoformat()
+    # Bepaal context op basis van gekozen marathondatum
+    today_utc = datetime.now(timezone.utc).date()
+    weeks_to_go = (marathon_date - today_utc).days // 7
+    today_str = today_utc.isoformat()
     marathon_str = marathon_date.isoformat()
 
-    # Samenvatting op basis van je bestaande s4/s12 (en niet-last4/last12)
+    # Samenvatting o.b.v. je bestaande aggregaten (s4/s12)
     summary = {
-        "periode_weken": weeks_back,
+        "periode_weken_terug_ingelezen": weeks_back,
         "weken_tot_marathon": weeks_to_go,
         "doel": goal,
-        # optioneel target_time kun je toevoegen als je die als input gebruikt
         "km_laatste_4w": s4["km"],
         "langste_run_4w_km": s4["longest"],
         "gem_pace_4w_min_per_km": s4["pace"],
@@ -277,46 +277,52 @@ if generate:
         "km_laatste_12w": s12["km"],
     }
 
-    # System prompt
+    # Strikte systeemprompt om verkeerde aannames te voorkomen
     system_msg = (
-        "Je bent een ervaren performance-expert en hardloopcoach. "
-        "Geef veilige, concrete aanbevelingen (training, herstel, voeding) voor marathonvoorbereiding.\n"
-        "Regels:\n"
-        "• Gebruik de meegegeven 'weken_tot_marathon' en data als waarheid.\n"
-        "• Geef nu een gedetailleerd 4–6 weken mesocycle-plan.\n"
-        "• Geef daarnaast een globale roadmap tot aan de marathon (base→build→peak→taper).\n"
-        "• Taper pas in de laatste 2–3 weken vóór de marathon.\n"
-        "• Respecteer PT/hockey/rustdagen en plan geen zware sessies vlak voor/na PT.\n"
+        "Je bent een ervaren marathoncoach.\n"
+        "HARD-CONSTRAINTS (MOET je volgen):\n"
+        f"1) De marathondatum is {marathon_str}. Er zijn precies {{weken_tot_marathon}} weken te gaan.\n"
+        "2) Maak ALLEEN een concreet trainingsschema voor de komende 4 weken (week 1 t/m 4 vanaf vandaag). "
+        "Gebruik geen 5e of 6e week in het concrete schema.\n"
+        "3) Geef daarnaast een KORTE macro-roadmap (base→build→peak→taper) tot de marathondatum, "
+        "zonder week-tot-week details. Plan TAPER pas als weken_tot_marathon ≤ 3.\n"
+        "4) Respecteer vaste afspraken (PT, hockey), voorkeurs-langeloopdag en rustdagen. "
+        "Vermijd zware sessies vlak voor/na PT en geef blessurepreventie mee.\n"
+        "5) Noem expliciet: 'Er zijn X weken tot de marathon op YYYY-MM-DD', waarbij X de aangeleverde waarde is."
     )
 
-    # Bouw de user context netjes gestructureerd (inclusief diepte-analyse en achtergrond)
+    # Gebruikersbericht met expliciete waarde-injectie (we geven X letterlijk mee)
     user_payload = {
         "vandaag": today_str,
         "marathondatum": marathon_str,
-        "weken_tot_marathon": weeks_to_go,
+        "weken_tot_marathon": weeks_to_go,          # <- expliciet en leidend
         "samenvatting": summary,
         "profiel": personal_profile,
-        "diepte_analyse": deep_insights,   # bevat o.a. gem_hr_drift als beschikbaar
-        "achtergrond": background          # dit is de inhoud uit je text area
+        "diepte_analyse": deep_insights,            # bv. gem_hr_drift
+        "achtergrond": background
     }
     user_msg = json.dumps(user_payload, ensure_ascii=False, indent=2)
 
     with st.spinner("Coachadvies genereren met ChatGPT…"):
         completion = client.chat.completions.create(
-            model=MODEL,  # let op: in dit script heet je model 'MODEL'
+            model=MODEL,
             messages=[
-                {"role": "system", "content": system_msg},
+                {"role": "system", "content": system_msg.replace("{weken_tot_marathon}", str(weeks_to_go))},
                 {"role": "user", "content": user_msg},
             ],
-            temperature=0.5,
+            temperature=0.4,
         )
         advice = completion.choices[0].message.content
 
     st.subheader("🧠 Persoonlijk advies (ChatGPT)")
     st.markdown(advice)
-    st.caption("Let op: dit is geen medisch advies. Luister naar je lichaam.")
+    st.caption(
+        "Let op: dit is geen medisch advies. Het schema is concreet voor 4 weken; de roadmap is globaal tot de marathondatum."
+    )
 else:
     st.info("Bewerk eventueel de achtergrondtekst hierboven en klik daarna op **‘Advies genereren’**.")
+
+
 
 
 
