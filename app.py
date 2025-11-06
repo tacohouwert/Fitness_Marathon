@@ -51,7 +51,10 @@ def fetch_activities(token, after_ts, pages=3):
         time.sleep(0.3)
     if not all_rows: return pd.DataFrame()
     df=pd.json_normalize(all_rows)
-    df["start_date_local"]=pd.to_datetime(df["start_date_local"]).dt.tz_localize("UTC", nonexistent="shift_forward", ambiguous="NaT", errors="coerce")
+    
+    df["start_date_local"] = pd.to_datetime(df["start_date_local"], utc=True, errors="coerce")
+
+
     df["distance_km"]=df["distance"]/1000
     df["pace_min_per_km"]=df["moving_time"]/(df["distance_km"]*60)
     df["pace"]=df["pace_min_per_km"].apply(lambda x:f"{int(x)}:{int((x-int(x))*60):02d}/km" if x and x>0 else None)
@@ -210,3 +213,4 @@ if st.button("🧠 Persoonlijk advies genereren"):
     st.subheader("🏃‍♂️ Persoonlijk advies")
     st.markdown(advice)
     st.download_button("📥 Download advies (.md)",advice,file_name="marathon_advies.md")
+
