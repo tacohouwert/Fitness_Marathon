@@ -33,7 +33,7 @@ STRAVA_API_BASE = "https://www.strava.com/api/v3"
 # OpenAI client
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-# =========[ Sidebar: Persoonlijk profiel (Optie A) ]=========
+# =========[ Sidebar: Persoonlijk profiel ]=========
 with st.sidebar:
     st.header("👤 Persoonlijk profiel")
     pt_days = st.multiselect(
@@ -43,11 +43,11 @@ with st.sidebar:
     )
     pt_times = st.text_input(
         "PT tijden (bijv. ma 07:30, wo 18:00)",
-        value="ma 20:00, wo 18:45",
+        value="ma 07:30, wo 18:00",
     )
 
     hockey = st.checkbox("Ik hockey op donderdag", value=True)
-    hockey_time = st.text_input("Hockey tijd", value="do 20:00–21:30")
+    hockey_time = st.text_input("Hockey tijd", value="do 20:30–22:00")
 
     long_run_day = st.selectbox(
         "Voorkeursdag lange duurloop", ["zaterdag", "zondag", "vrijdag"], index=0
@@ -66,7 +66,7 @@ with st.sidebar:
     )
     other_constraints = st.text_area(
         "Extra context / beperkingen",
-        value="Liever geen intensieve intervallen op PT-dagen.",
+        value="Kleine gevoeligheid achilles links; liever geen intensieve intervallen op PT-dagen.",
         placeholder="Blessurehistorie, voorkeuren, reistijd, etc.",
     )
     st.caption("Dit profiel wordt meegenomen in het coach-advies.")
@@ -237,20 +237,31 @@ with col3:
     goal = st.selectbox("Doel", ["Uitlopen", "PR lopen", "Tijdsspecifiek"], index=0)
     target_time = st.text_input("Streeftijd (hh:mm:ss)", value="", help="Alleen invullen bij Tijdsspecifiek.")
 
-# =========[ Background.txt (optioneel) ]=========
-background_text = ""
+# =========[ Background.txt → eerst bewerken, dan pas genereren ]=========
 bg_path = os.path.join(os.getcwd(), "background.txt")
-if os.path.exists(bg_path):
-    try:
-        with open(bg_path, "r", encoding="utf-8") as f:
-            background_text = f.read().strip()
-        st.success("Achtergrondinformatie geladen uit background.txt")
-    except Exception as e:
-        st.warning(f"Kon background.txt niet lezen: {e}")
-else:
-    st.info("Optioneel: plaats een 'background.txt' in de root met extra achtergrondinformatie (werk, doelen, medische notities).")
+if "background_text" not in st.session_state:
+    if os.path.exists(bg_path):
+        try:
+            with open(bg_path, "r", encoding="utf-8") as f:
+                st.session_state.background_text = f.read().strip()
+            st.success("Achtergrondinformatie geladen uit background.txt")
+        except Exception as e:
+            st.session_state.background_text = ""
+            st.warning(f"Kon background.txt niet lezen: {e}")
+    else:
+        st.session_state.background_text = ""
+        st.info("Optioneel: plaats een 'background.txt' in de root. Je kunt hieronder direct tekst invullen of aanpassen.")
 
-# =========[ Data ophalen ]=========
+st.subheader("📝 Achtergrondinformatie (bewerkbaar)")
+updated_background = st.text_area(
+    "Deze tekst wordt meegestuurd naar het coach-advies.",
+    value=st.session_state.background_text,
+    height=200,
+)
+
+st.caption("Wijzigingen worden niet automatisch naar het bestand geschreven op Streamlit Cloud; ze gelden voor deze sessie.")
+
+# =========[ Data ophalen van Strava ]=========
 after_dt = datetime.now(timezone.utc) - timedelta(weeks=weeks_back)
 after_ts = int(after_dt.timestamp())
 
@@ -311,63 +322,70 @@ personal_profile = {
     "extra_constraints": other_constraints,
 }
 
-# =========[ ChatGPT-advies ]=========
-summary = {
-    "periode_weken": weeks_back,
-    "weken_tot_marathon": weeks_to_go,
-    "doel": goal,
-    "streeftijd": target_time if goal == "Tijdsspecifiek" else None,
-    "km_laatste_4w": last4["km"],
-    "langste_run_4w_km": last4["longest_km"],
-    "gem_pace_4w": mins_to_pace_str(last4["avg_pace"]),
-    "gem_hr_4w": last4["avg_hr"],
-    "km_laatste_12w": last12["km"],
-}
+# =========[ Advies genereren (knop) ]=========
+st.markdown("---")
+generate = st.button("🧠 Advies genereren op basis van bovenstaande achtergrond + Strava")
 
-# System prompt met harde regels (geen te vroege taper)
-system_msg = (
-    "Je bent een hardloopcoach. Produceer altijd veilige, concrete plannen.\n"
-    "Regels:\n"
-    "• Gebruik de meegegeven 'weken_tot_marathon' en absolute data als waarheid.\n"
-    "• Geef NU alleen een gedetailleerd 4–6 weken mesocycle-plan.\n"
-    "• Geef daarnaast een globale roadmap tot aan de marathon (base→build→peak→taper) op maand-/fase-niveau.\n"
-    "• Taper pas in de laatste 2–3 weken vóór de marathon. Als weken_tot_marathon > 10: GEEN taper in het 4–6 weken plan.\n"
-    "• Respecteer vaste afspraken (PT, hockey), voorkeurs-langeloopdag en rustdagen.\n"
-    "• Vermijd zware sessies vlak vóór/na PT of zware sporten. Benoem blessurepreventie en alternatieven.\n"
-)
+if generate:
+    # Update session background met de bewerkte tekst
+    st.session_state.background_text = updated_background or ""
 
-# User prompt met extra achtergrond uit background.txt
-user_msg = (
-    "Context:\n"
-    f"- Vandaag: {today_str}\n"
-    f"- Marathondatum: {marathon_str}\n"
-    f"- Weken tot marathon: {weeks_to_go}\n\n"
-    "Opdracht:\n"
-    "1) Maak een gedetailleerd schema voor de komende 4–6 weken (mesocycle) op basis van mijn recente Strava-data en mijn profiel.\n"
-    "2) Maak daarnaast een globale planning tot aan de marathon met fases (base→build→peak→taper) en belangrijke mijlpalen (langste duurlopen), "
-    "maar plan taper uitsluitend in de laatste 2–3 weken vóór de marathondatum.\n"
-    "3) Respecteer PT/hockey/rustdagen en plan geen zware sessies vlak voor/na PT.\n\n"
-    f"Samenvatting JSON: {json.dumps(summary, ensure_ascii=False)}\n"
-    f"Persoonlijk profiel JSON: {json.dumps(personal_profile, ensure_ascii=False)}\n"
-)
+    # =========[ ChatGPT-advies ]=========
+    summary = {
+        "periode_weken": weeks_back,
+        "weken_tot_marathon": weeks_to_go,
+        "doel": goal,
+        "streeftijd": target_time if goal == "Tijdsspecifiek" else None,
+        "km_laatste_4w": last4["km"],
+        "langste_run_4w_km": last4["longest_km"],
+        "gem_pace_4w": mins_to_pace_str(last4["avg_pace"]),
+        "gem_hr_4w": last4["avg_hr"],
+        "km_laatste_12w": last12["km"],
+    }
 
-if background_text:
-    user_msg += f"\nAchtergrondinformatie (uit background.txt):\n{background_text}\n"
-
-with st.spinner("Coachadvies genereren met ChatGPT…"):
-    completion = client.chat.completions.create(
-        model=OPENAI_MODEL,
-        messages=[
-            {"role": "system", "content": system_msg},
-            {"role": "user", "content": user_msg},
-        ],
-        temperature=0.5,
+    # System prompt met harde regels (geen te vroege taper)
+    system_msg = (
+        "Je bent een hardloopcoach. Produceer altijd veilige, concrete plannen.\n"
+        "Regels:\n"
+        "• Gebruik de meegegeven 'weken_tot_marathon' en absolute data als waarheid.\n"
+        "• Geef NU alleen een gedetailleerd 4–6 weken mesocycle-plan.\n"
+        "• Geef daarnaast een globale roadmap tot aan de marathon (base→build→peak→taper) op maand-/fase-niveau.\n"
+        "• Taper pas in de laatste 2–3 weken vóór de marathon. Als weken_tot_marathon > 10: GEEN taper in het 4–6 weken plan.\n"
+        "• Respecteer vaste afspraken (PT, hockey), voorkeurs-langeloopdag en rustdagen.\n"
+        "• Vermijd zware sessies vlak vóór/na PT of zware sporten. Benoem blessurepreventie en alternatieven.\n"
     )
-    advice = completion.choices[0].message.content
 
-st.subheader("🧠 Persoonlijk advies (ChatGPT)")
-st.markdown(advice)
-st.caption(
-    "Let op: dit is geen medisch advies. Luister naar je lichaam en raadpleeg een professional bij klachten."
-)
+    # User prompt met geüpdatete achtergrondtekst
+    user_msg = (
+        "Context:\n"
+        f"- Vandaag: {today_str}\n"
+        f"- Marathondatum: {marathon_str}\n"
+        f"- Weken tot marathon: {weeks_to_go}\n\n"
+        "Opdracht:\n"
+        "1) Maak een gedetailleerd schema voor de komende 4–6 weken (mesocycle) op basis van mijn recente Strava-data en mijn profiel.\n"
+        "2) Maak daarnaast een globale planning tot aan de marathon met fases (base→build→peak→taper) en belangrijke mijlpalen (langste duurlopen), "
+        "maar plan taper uitsluitend in de laatste 2–3 weken vóór de marathondatum.\n"
+        "3) Respecteer PT/hockey/rustdagen en plan geen zware sessies vlak voor/na PT.\n\n"
+        f"Samenvatting JSON: {json.dumps(summary, ensure_ascii=False)}\n"
+        f"Persoonlijk profiel JSON: {json.dumps(personal_profile, ensure_ascii=False)}\n"
+        f"Achtergrondinformatie (handmatig bijgewerkt):\n{st.session_state.background_text}\n"
+    )
 
+    with st.spinner("Coachadvies genereren met ChatGPT…"):
+        completion = client.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=[
+                {"role": "system", "content": system_msg},
+                {"role": "user", "content": user_msg},
+            ],
+            temperature=0.5,
+        )
+        advice = completion.choices[0].message.content
+
+    st.subheader("🧠 Persoonlijk advies (ChatGPT)")
+    st.markdown(advice)
+    st.caption(
+        "Let op: dit is geen medisch advies. Luister naar je lichaam en raadpleeg een professional bij klachten."
+    )
+else:
+    st.info("Bewerk eventueel de achtergrondtekst hierboven en klik daarna op **‘Advies genereren’**.")
