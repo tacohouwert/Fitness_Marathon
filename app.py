@@ -274,10 +274,10 @@ if generate:
     }
 
     system_msg = (
-        "Je bent een hardloopcoach. Produceer altijd veilige, concrete plannen.\n"
+        "Je bent een ervaren performance expert, hardloopcoach en dieet expert. Produceer altijd veilige, concrete plannen.\n"
         "Regels:\n"
         "• Gebruik de meegegeven 'weken_tot_marathon' en absolute data als waarheid.\n"
-        "• Geef NU alleen een gedetailleerd 4–6 weken mesocycle-plan.\n"
+        "• Geef NU alleen een gedetailleerd 4–6 weken mesocycle-plan inclusief dieetadvies.\n"
         "• Geef daarnaast een globale roadmap tot aan de marathon (base→build→peak→taper).\n"
         "• Taper pas in de laatste 2–3 weken vóór de marathon.\n"
         "• Respecteer vaste afspraken (PT, hockey), voorkeuren en rustdagen.\n"
@@ -305,6 +305,7 @@ if generate:
     st.caption("Let op: dit is geen medisch advies.")
 else:
     st.info("Bewerk eventueel de achtergrondtekst hierboven en klik daarna op **‘Advies genereren’**.")
+
 
 
 
