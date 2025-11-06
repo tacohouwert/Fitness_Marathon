@@ -100,14 +100,14 @@ def time_in_zones(hr, zones):
 with st.sidebar:
     st.header("👤 Persoonlijk profiel")
     pt_days = st.multiselect("PT-dagen",["maandag","dinsdag","woensdag","donderdag","vrijdag"],["maandag","woensdag"])
-    pt_times = st.text_input("PT tijden", "ma 07:30, wo 18:00")
+    pt_times = st.text_input("PT tijden", "ma 20:00, wo 18:45")
     hockey = st.checkbox("Ik hockey op donderdag", True)
-    hockey_time = st.text_input("Hockey tijd", "do 20:30–22:00")
+    hockey_time = st.text_input("Hockey tijd", "do 20:00–21:30")
     long_run_day = st.selectbox("Voorkeursdag lange duurloop",["zaterdag","zondag","vrijdag"],0)
     rest_days = st.multiselect("Vaste rustdagen",["maandag","dinsdag","woensdag","donderdag","vrijdag","zaterdag","zondag"],[])
     st.markdown("—")
     weekly_availability = st.text_area("Beschikbaarheid (vrije vensters)", "di 07:00–08:00, vr 12:00–13:00")
-    other_constraints = st.text_area("Extra context / beperkingen", "Kleine gevoeligheid achilles links; liever geen intensieve intervallen op PT-dagen.")
+    other_constraints = st.text_area("Extra context / beperkingen", "Liever geen intensieve intervallen op PT-dagen.")
     st.caption("Dit profiel wordt meegenomen in het coach-advies.")
     st.divider()
     st.caption(f"Laatste update: {datetime.now().strftime('%H:%M:%S')}")
@@ -213,4 +213,5 @@ if st.button("🧠 Persoonlijk advies genereren"):
     st.subheader("🏃‍♂️ Persoonlijk advies")
     st.markdown(advice)
     st.download_button("📥 Download advies (.md)",advice,file_name="marathon_advies.md")
+
 
