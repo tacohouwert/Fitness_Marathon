@@ -156,24 +156,64 @@ st.metric("Km (4w)",s4["km"]); st.metric("Langste run (km)",s4["longest"])
 deep_insights = {}
 if deep:
     zones = fetch_zones(access)
-    runs = acts[acts["sport_type"]=="Run"].head(8)
-    drifts=[]
-    for _,r in runs.iterrows():
-        sid=int(r["id"])
-        streams=fetch_streams(access,sid)
-        drift=hr_decoupling(streams.get("velocity_smooth",{}).get("data"), streams.get("heartrate",{}).get("data"))
-        tiz=time_in_zones(streams.get("heartrate",{}).get("data"), zones)
-        drifts.append({"date":r["start_date_local"],"hr_drift":drift,**tiz})
-    ddf=pd.DataFrame(drifts).dropna(subset=["hr_drift"])
+    runs = acts[acts["sport_type"] == "Run"].head(8)
+    drifts = []
+
+    for _, r in runs.iterrows():
+        sid = int(r["id"])
+        streams = fetch_streams(access, sid)
+
+        drift = hr_decoupling(
+            streams.get("velocity_smooth", {}).get("data"),
+            streams.get("heartrate", {}).get("data"),
+        )
+
+        tiz = time_in_zones(
+            streams.get("heartrate", {}).get("data"), zones
+        )
+
+        drifts.append({
+            "date": r["start_date_local"],
+            "hr_drift": drift,
+            **tiz
+        })
+
+    ddf = pd.DataFrame(drifts).dropna(subset=["hr_drift"])
+
     if not ddf.empty:
-        st.subheader("🔬 HR-drift per run (%)")
-        st.dataframe(ddf.style.background_gradient(subset=["hr_drift"], cmap="coolwarm"))
-        fig,ax=plt.subplots()
-        ax.plot(ddf["date"],ddf["hr_drift"],"o-")
-        ax.axhline(5,color="g",ls="--"); ax.axhline(10,color="r",ls="--")
-        ax.set_ylabel("HR-drift (%)"); ax.grid(True)
-        st.pyplot(fig)
-        deep_insights["gem_hr_drift"] = round(ddf["hr_drift"].mean(),1)
+        st.subheader("🔬 Diepte-analyse")
+
+        # Uitklapbare sectie voor de tabel
+        with st.expander("📋 Toon tabel met HR-drift per run"):
+            st.dataframe(
+                ddf.style.background_gradient(subset=["hr_drift"], cmap="coolwarm")
+            )
+            st.caption(
+                "Elke regel toont de hartslag-drift per run (%). "
+                "Positieve waarden = oplopende hartslag → meer vermoeidheid; "
+                "negatieve waarden = stabiel of beter herstel."
+            )
+
+        # Uitklapbare sectie voor de grafiek
+        with st.expander("📉 Toon HR-drift-grafiek"):
+            fig, ax = plt.subplots()
+            ax.plot(ddf["date"], ddf["hr_drift"], "o-", label="HR-drift (%)")
+            ax.axhline(5, color="g", ls="--", label="Goede zone (<5%)")
+            ax.axhline(10, color="r", ls="--", label="Te hoog (>10%)")
+            ax.set_ylabel("HR-drift (%)")
+            ax.set_xlabel("Datum")
+            ax.grid(True)
+            ax.legend()
+            st.pyplot(fig)
+            st.caption(
+                "De grafiek toont de HR-drift (%) per run. "
+                "Een lagere waarde wijst op betere aerobe efficiëntie."
+            )
+
+        # Gemiddelde drift berekenen
+        deep_insights["gem_hr_drift"] = round(ddf["hr_drift"].mean(), 1)
+    else:
+        st.info("Geen HR-driftdata beschikbaar voor de geselecteerde runs.")
 
 # =========[ Persoonlijk profiel opslaan voor ChatGPT ]=========
 personal_profile = {
@@ -213,6 +253,7 @@ if st.button("🧠 Persoonlijk advies genereren"):
     st.subheader("🏃‍♂️ Persoonlijk advies")
     st.markdown(advice)
     st.download_button("📥 Download advies (.md)",advice,file_name="marathon_advies.md")
+
 
 
 
