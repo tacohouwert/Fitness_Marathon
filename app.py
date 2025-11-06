@@ -160,15 +160,26 @@ by_type_last4 = _agg_by_type(acts_4w_all)
 
 # UI: onder een expander tonen (optioneel)
 st.subheader("📊 Mix per sporttype")
-with st.expander("Toon verdeling per sporttype (afgelopen periode en laatste 4 weken)"):
+with st.expander("📊 Toon verdeling per sporttype (afgelopen periode en laatste 4 weken)"):
     if by_type_total:
-        st.write("**Ingelezen periode (weeks_back):**")
-        st.json(by_type_total)
-    else:
-        st.write("Geen data voor de ingelezen periode.")
+        st.markdown("**Ingelezen periode (weeks_back)**")
+        df_total = pd.DataFrame(by_type_total).T.reset_index().rename(columns={"index": "Sporttype"})
+        st.dataframe(
+            df_total.style.format({"distance_km": "{:.1f}", "hours": "{:.2f}", "elev_m": "{:.0f}"}),
+            use_container_width=True,
+        )
+
     if by_type_last4:
-        st.write("**Laatste 4 weken:**")
-        st.json(by_type_last4)
+        st.markdown("**Laatste 4 weken**")
+        df_last4 = pd.DataFrame(by_type_last4).T.reset_index().rename(columns={"index": "Sporttype"})
+        st.dataframe(
+            df_last4.style.format({"distance_km": "{:.1f}", "hours": "{:.2f}", "elev_m": "{:.0f}"}),
+            use_container_width=True,
+        )
+
+    if not by_type_total and not by_type_last4:
+        st.info("Geen activiteiten gevonden in de opgegeven periode.")
+
 
 
 # =========[ Overzicht van recente Strava-activiteiten ]=========
@@ -369,6 +380,7 @@ if generate:
     )
 else:
     st.info("Bewerk eventueel de achtergrondtekst hierboven en klik daarna op **‘Advies genereren’**.")
+
 
 
 
