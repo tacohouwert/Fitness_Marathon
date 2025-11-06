@@ -5,16 +5,15 @@ import numpy as np, pandas as pd, requests, streamlit as st
 from openai import OpenAI
 import matplotlib.pyplot as plt
 
-# =========[ Streamlit basis ]=========
+# =========[ Streamlit setup ]=========
 st.set_page_config(page_title="NY Marathon Coach", page_icon="🏃‍♂️", layout="wide")
 st.title("🏃‍♂️ NY Marathon Coach — Strava → Persoonlijk advies")
 
-# =========[ Secrets check ]=========
+# =========[ Secrets controle ]=========
 REQUIRED = ["STRAVA_CLIENT_ID","STRAVA_CLIENT_SECRET","STRAVA_REFRESH_TOKEN","OPENAI_API_KEY"]
 missing = [k for k in REQUIRED if k not in st.secrets]
 if missing:
-    st.error(f"❌ Ontbrekende secrets: {', '.join(missing)}\n"
-             "Voeg ze toe in Streamlit Cloud → Settings → Secrets.")
+    st.error(f"❌ Ontbrekende secrets: {', '.join(missing)}\nVoeg ze toe in Streamlit Cloud → Settings → Secrets.")
     st.stop()
 
 STRAVA_CLIENT_ID = st.secrets["STRAVA_CLIENT_ID"]
@@ -22,13 +21,13 @@ STRAVA_CLIENT_SECRET = st.secrets["STRAVA_CLIENT_SECRET"]
 STRAVA_REFRESH_TOKEN = st.secrets["STRAVA_REFRESH_TOKEN"]
 OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
 MODEL = st.secrets.get("OPENAI_MODEL","gpt-4o-mini")
-
 client = OpenAI(api_key=OPENAI_API_KEY)
-API = "https://www.strava.com/api/v3"
 
-def bearer(token): return {"Authorization": f"Bearer {token}"}
+STRAVA_API = "https://www.strava.com/api/v3"
 
-# =========[ Token ophalen & caching ]=========
+def bearer(t): return {"Authorization": f"Bearer {t}"}
+
+# =========[ Tokens en Strava API ]=========
 @st.cache_data(ttl=50*60)
 def get_access_token(refresh_token):
     r = requests.post("https://www.strava.com/oauth/token", data={
@@ -39,38 +38,29 @@ def get_access_token(refresh_token):
     r.raise_for_status(); return r.json()
 
 @st.cache_data(ttl=15*60)
-def fetch_activities(access_token, after_ts, pages=3):
-    all_rows=[]; per_page=50
+def fetch_activities(token, after_ts, pages=3):
+    all_rows=[]
     for p in range(1,pages+1):
-        r=requests.get(f"{API}/athlete/activities",headers=bearer(access_token),
-                       params={"per_page":per_page,"page":p,"after":after_ts},timeout=30)
-        if r.status_code==429: st.error("Rate limit bereikt"); break
+        r=requests.get(f"{STRAVA_API}/athlete/activities",headers=bearer(token),
+                       params={"per_page":50,"page":p,"after":after_ts},timeout=30)
         if not r.ok: break
         chunk=r.json()
         if not chunk: break
         all_rows+=chunk
-        if len(chunk)<per_page: break
+        if len(chunk)<50: break
         time.sleep(0.3)
     if not all_rows: return pd.DataFrame()
     df=pd.json_normalize(all_rows)
-    df["start_date_local"]=pd.to_datetime(df["start_date_local"])
+    df["start_date_local"]=pd.to_datetime(df["start_date_local"]).dt.tz_localize("UTC", nonexistent="shift_forward", ambiguous="NaT", errors="coerce")
     df["distance_km"]=df["distance"]/1000
     df["pace_min_per_km"]=df["moving_time"]/(df["distance_km"]*60)
     df["pace"]=df["pace_min_per_km"].apply(lambda x:f"{int(x)}:{int((x-int(x))*60):02d}/km" if x and x>0 else None)
     return df.sort_values("start_date_local",ascending=False)
 
 @st.cache_data(ttl=60*60)
-def fetch_activity_detail(token,aid):
+def fetch_streams(token, aid):
     try:
-        r=requests.get(f"{API}/activities/{aid}",headers=bearer(token),params={"include_all_efforts":"true"},timeout=30)
-        if r.ok: return r.json()
-    except: pass
-    return {}
-
-@st.cache_data(ttl=60*60)
-def fetch_streams(token,aid):
-    try:
-        r=requests.get(f"{API}/activities/{aid}/streams",headers=bearer(token),
+        r=requests.get(f"{STRAVA_API}/activities/{aid}/streams",headers=bearer(token),
                        params={"keys":"time,distance,velocity_smooth,heartrate,cadence,altitude","key_by_type":"true"},timeout=30)
         if r.ok: return r.json()
     except: pass
@@ -78,7 +68,7 @@ def fetch_streams(token,aid):
 
 @st.cache_data(ttl=24*60*60)
 def fetch_zones(token):
-    r=requests.get(f"{API}/athlete/zones",headers=bearer(token))
+    r=requests.get(f"{STRAVA_API}/athlete/zones",headers=bearer(token))
     return r.json() if r.ok else {}
 
 # =========[ Analyse helpers ]=========
@@ -93,99 +83,130 @@ def hr_decoupling(vel,hr):
     return (r2-r1)/r1*100
 
 def time_in_zones(hr, zones):
-    zdef=zones.get("heart_rate",{}).get("zones",[]); 
+    zdef=zones.get("heart_rate",{}).get("zones",[])
     if not hr or not zdef: return {}
     counts=[0]*len(zdef)
     for h in hr:
         for i,z in enumerate(zdef):
-            lo=z.get("min",0); hi=z.get("max",1e9)
-            if lo<=h<=hi: counts[i]+=1; break
+            if z.get("min",0)<=h<=z.get("max",1e9):
+                counts[i]+=1; break
     tot=sum(counts) or 1
     return {f"Z{i+1}":round(c/tot*100,1) for i,c in enumerate(counts)}
 
-# =========[ Sidebar-profiel ]=========
+# =========[ Sidebar profiel — originele opties terug ]=========
 with st.sidebar:
-    st.header("👤 Profiel")
-    pt_days=st.multiselect("PT-dagen",["ma","di","wo","do","vr"],["ma","wo"])
-    hockey=st.checkbox("Hockey donderdag",True)
-    longrun=st.selectbox("Dag lange duurloop",["za","zo"],0)
-    rest=st.multiselect("Rustdagen",["ma","di","wo","do","vr","za","zo"],[])
-    st.caption("Deze voorkeuren worden in het advies meegenomen.")
+    st.header("👤 Persoonlijk profiel")
+    pt_days = st.multiselect("PT-dagen",["maandag","dinsdag","woensdag","donderdag","vrijdag"],["maandag","woensdag"])
+    pt_times = st.text_input("PT tijden", "ma 07:30, wo 18:00")
+    hockey = st.checkbox("Ik hockey op donderdag", True)
+    hockey_time = st.text_input("Hockey tijd", "do 20:30–22:00")
+    long_run_day = st.selectbox("Voorkeursdag lange duurloop",["zaterdag","zondag","vrijdag"],0)
+    rest_days = st.multiselect("Vaste rustdagen",["maandag","dinsdag","woensdag","donderdag","vrijdag","zaterdag","zondag"],[])
+    st.markdown("—")
+    weekly_availability = st.text_area("Beschikbaarheid (vrije vensters)", "di 07:00–08:00, vr 12:00–13:00")
+    other_constraints = st.text_area("Extra context / beperkingen", "Kleine gevoeligheid achilles links; liever geen intensieve intervallen op PT-dagen.")
+    st.caption("Dit profiel wordt meegenomen in het coach-advies.")
     st.divider()
     st.caption(f"Laatste update: {datetime.now().strftime('%H:%M:%S')}")
 
-# =========[ Parameters ]=========
-col1,col2,col3=st.columns([1,1,2])
-with col1: weeks_back=st.slider("Weken terug",4,26,8)
-with col2: marathon=st.date_input("Marathondatum",datetime(datetime.now().year+1,11,1).date())
-with col3: goal=st.selectbox("Doel",["Uitlopen","PR","Tijdsspecifiek"])
-deep=st.checkbox("🔬 Diepte-analyse",value=True)
+# =========[ Parameters bovenin ]=========
+col1,col2,col3 = st.columns([1,1,2])
+with col1: weeks_back = st.slider("Weken terug ophalen",4,26,8)
+with col2: marathon_date = st.date_input("Marathon datum", datetime(datetime.now().year+1,11,1).date())
+with col3: goal = st.selectbox("Doel",["Uitlopen","PR lopen","Tijdsspecifiek"])
+deep = st.checkbox("🔬 Diepte-analyse",value=True)
 
-# =========[ Achtergrondtekst ]=========
-bg_path=os.path.join(os.getcwd(),"background.txt")
-txt=open(bg_path,"r",encoding="utf-8").read().strip() if os.path.exists(bg_path) else ""
-background=st.text_area("📝 Achtergrondinformatie",value=txt,height=180)
+# =========[ Achtergrondinformatie ]=========
+bg_path = os.path.join(os.getcwd(),"background.txt")
+background = open(bg_path,"r",encoding="utf-8").read().strip() if os.path.exists(bg_path) else ""
+background = st.text_area("📝 Achtergrondinformatie (optioneel)", value=background, height=180)
 
-# =========[ Data ophalen ]=========
-after=int((datetime.now(timezone.utc)-timedelta(weeks=weeks_back)).timestamp())
-with st.spinner("⏳ Data ophalen van Strava…"):
-    token=get_access_token(STRAVA_REFRESH_TOKEN)
-    access=token["access_token"]
-    acts=fetch_activities(access,after)
-if acts.empty: st.stop()
+# =========[ Strava data ophalen ]=========
+after = int((datetime.now(timezone.utc) - timedelta(weeks=weeks_back)).timestamp())
+with st.spinner("📡 Strava-data ophalen..."):
+    token = get_access_token(STRAVA_REFRESH_TOKEN)
+    access = token["access_token"]
+    acts = fetch_activities(access, after)
+if acts.empty: st.warning("Geen activiteiten gevonden."); st.stop()
 
-athlete=token.get("athlete",{}).get("id")
-st.caption(f"Strava atleet ID: {athlete}")
 st.dataframe(acts[["start_date_local","name","distance_km","pace","average_heartrate","total_elevation_gain"]])
 
-# =========[ Samenvatting ]=========
-def summary_block(df,w=4):
-    d=df[df["start_date_local"]>=datetime.now()-timedelta(weeks=w)]
-    km=d["distance_km"].sum(); longest=d["distance_km"].max(); runs=len(d)
-    pace=d["pace_min_per_km"].mean(); hr=d["average_heartrate"].mean()
-    return {"weken":w,"km":round(km,1),"langste":round(longest,1),"runs":runs,"pace":pace,"hr":hr}
+# =========[ Samenvatting (UTC fix) ]=========
+def summary_block(df, w=4):
+    now_utc = datetime.now(timezone.utc)
+    cutoff = now_utc - timedelta(weeks=w)
+    d = df[df["start_date_local"] >= cutoff]
+    if d.empty: return {"weeks":w,"km":0,"longest":0,"runs":0,"pace":None,"hr":None}
+    return {
+        "weeks":w,
+        "km":round(d["distance_km"].sum(),1),
+        "longest":round(d["distance_km"].max(),1),
+        "runs":len(d),
+        "pace":round(d["pace_min_per_km"].mean(),2),
+        "hr":round(d["average_heartrate"].mean(),1) if d["average_heartrate"].notna().any() else None
+    }
 
-s4,s12=summary_block(acts,4),summary_block(acts,12)
-st.metric("Km (4w)",s4["km"]); st.metric("Langste run (km)",s4["langste"])
+s4,s12 = summary_block(acts,4), summary_block(acts,12)
+st.metric("Km (4w)",s4["km"]); st.metric("Langste run (km)",s4["longest"])
 
 # =========[ Diepte-analyse ]=========
-deep_insights={}
+deep_insights = {}
 if deep:
-    zones=fetch_zones(access)
-    sel=acts[acts["sport_type"]=="Run"].head(6)
+    zones = fetch_zones(access)
+    runs = acts[acts["sport_type"]=="Run"].head(8)
     drifts=[]
-    for _,r in sel.iterrows():
+    for _,r in runs.iterrows():
         sid=int(r["id"])
         streams=fetch_streams(access,sid)
-        drift=hr_decoupling(streams.get("velocity_smooth",{}).get("data"),
-                            streams.get("heartrate",{}).get("data"))
-        tiz=time_in_zones(streams.get("heartrate",{}).get("data"),zones)
-        drifts.append({"date":r["start_date_local"],"drift":drift})
-    ddf=pd.DataFrame(drifts).dropna()
+        drift=hr_decoupling(streams.get("velocity_smooth",{}).get("data"), streams.get("heartrate",{}).get("data"))
+        tiz=time_in_zones(streams.get("heartrate",{}).get("data"), zones)
+        drifts.append({"date":r["start_date_local"],"hr_drift":drift,**tiz})
+    ddf=pd.DataFrame(drifts).dropna(subset=["hr_drift"])
     if not ddf.empty:
-        st.subheader("HR-drift per run (%)")
-        st.dataframe(ddf.style.background_gradient(subset=["drift"],cmap="coolwarm"))
-        fig,ax=plt.subplots(); ax.plot(ddf["date"],ddf["drift"],"o-"); ax.axhline(5,color="g",ls="--"); ax.axhline(10,color="r",ls="--")
-        ax.set_ylabel("HR-drift %"); ax.grid(True); st.pyplot(fig)
-        deep_insights["gem_drift_pct"]=round(ddf["drift"].mean(),1)
+        st.subheader("🔬 HR-drift per run (%)")
+        st.dataframe(ddf.style.background_gradient(subset=["hr_drift"], cmap="coolwarm"))
+        fig,ax=plt.subplots()
+        ax.plot(ddf["date"],ddf["hr_drift"],"o-")
+        ax.axhline(5,color="g",ls="--"); ax.axhline(10,color="r",ls="--")
+        ax.set_ylabel("HR-drift (%)"); ax.grid(True)
+        st.pyplot(fig)
+        deep_insights["gem_hr_drift"] = round(ddf["hr_drift"].mean(),1)
 
-# =========[ ChatGPT-advies ]=========
-summary={
-    "km_laatste_4w":s4["km"],
-    "langste_run_4w":s4["langste"],
-    "gem_pace":s4["pace"],
-    "gem_hr":s4["hr"],
-    "weken_tot_marathon":(marathon-datetime.now().date()).days//7
+# =========[ Persoonlijk profiel opslaan voor ChatGPT ]=========
+personal_profile = {
+    "pt_days": pt_days,
+    "pt_times": pt_times,
+    "hockey_thursday": hockey,
+    "hockey_time": hockey_time,
+    "preferred_long_run_day": long_run_day,
+    "rest_days": rest_days,
+    "availability": weekly_availability,
+    "extra_constraints": other_constraints,
 }
-profile={"pt_days":pt_days,"hockey":hockey,"longrun":longrun,"rest":rest}
-payload={"samenvatting":summary,"profiel":profile,"diepte":deep_insights,"achtergrond":background}
-prompt=json.dumps(payload,ensure_ascii=False,indent=2)
 
-if st.button("🧠 Advies genereren"):
-    st.spinner("Coachadvies genereren…")
-    system="Je bent een ervaren marathoncoach. Gebruik data, context en diepte-analyse om veilige, concrete aanbevelingen te geven (training, herstel, blessurepreventie)."
-    r=client.chat.completions.create(model=MODEL,messages=[{"role":"system","content":system},{"role":"user","content":prompt}],temperature=0.5)
-    advice=r.choices[0].message.content
+# =========[ ChatGPT-advies genereren ]=========
+if st.button("🧠 Persoonlijk advies genereren"):
+    summary = {
+        "km_laatste_4w": s4["km"],
+        "langste_run_4w": s4["longest"],
+        "gem_pace": s4["pace"],
+        "gem_hr": s4["hr"],
+        "weken_tot_marathon": (marathon_date - datetime.now().date()).days//7
+    }
+    payload = {
+        "samenvatting": summary,
+        "profiel": personal_profile,
+        "diepte": deep_insights,
+        "achtergrond": background
+    }
+    prompt = json.dumps(payload, ensure_ascii=False, indent=2)
+    st.spinner("Advies genereren met ChatGPT...")
+    system="Je bent een ervaren marathoncoach. Gebruik data, profiel en analyse om veilige, concrete trainingsaanbevelingen te geven."
+    r = client.chat.completions.create(
+        model=MODEL,
+        messages=[{"role":"system","content":system},{"role":"user","content":prompt}],
+        temperature=0.5)
+    advice = r.choices[0].message.content
     st.subheader("🏃‍♂️ Persoonlijk advies")
     st.markdown(advice)
     st.download_button("📥 Download advies (.md)",advice,file_name="marathon_advies.md")
