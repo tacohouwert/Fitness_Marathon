@@ -1,4 +1,5 @@
 # app.py
+import os
 import json
 import math
 import time
@@ -236,6 +237,19 @@ with col3:
     goal = st.selectbox("Doel", ["Uitlopen", "PR lopen", "Tijdsspecifiek"], index=0)
     target_time = st.text_input("Streeftijd (hh:mm:ss)", value="", help="Alleen invullen bij Tijdsspecifiek.")
 
+# =========[ Background.txt (optioneel) ]=========
+background_text = ""
+bg_path = os.path.join(os.getcwd(), "background.txt")
+if os.path.exists(bg_path):
+    try:
+        with open(bg_path, "r", encoding="utf-8") as f:
+            background_text = f.read().strip()
+        st.success("Achtergrondinformatie geladen uit background.txt")
+    except Exception as e:
+        st.warning(f"Kon background.txt niet lezen: {e}")
+else:
+    st.info("Optioneel: plaats een 'background.txt' in de root met extra achtergrondinformatie (werk, doelen, medische notities).")
+
 # =========[ Data ophalen ]=========
 after_dt = datetime.now(timezone.utc) - timedelta(weeks=weeks_back)
 after_ts = int(after_dt.timestamp())
@@ -276,6 +290,10 @@ weeks_to_go = (
     datetime.combine(marathon_date, datetime.min.time(), tzinfo=timezone.utc) - datetime.now(timezone.utc)
 ).days // 7
 
+today_str = datetime.now(timezone.utc).date().isoformat()
+marathon_str = marathon_date.isoformat()
+st.info(f"📅 Vandaag: {today_str} · Marathondatum: {marathon_str} · Weken tot marathon: {weeks_to_go}")
+
 mcol1, mcol2, mcol3 = st.columns(3)
 mcol1.metric("Km (laatste 4w)", last4["km"])
 mcol2.metric("Langste run (km, 4w)", last4["longest_km"])
@@ -306,24 +324,35 @@ summary = {
     "km_laatste_12w": last12["km"],
 }
 
+# System prompt met harde regels (geen te vroege taper)
 system_msg = (
-    "Je bent een hardloopcoach die op basis van recente trainingsdata en persoonlijke context een concreet, "
-    "veilig en persoonlijk advies geeft voor een marathonvoorbereiding. "
-    "Houd rekening met geleidelijke opbouw (ca. 5–10% per week), periodisering (base → build → peak → taper), "
-    "en blessurepreventie. Geef weekschema-blokken (range), richttempo’s als % van recente pace, "
-    "en concrete long-run doelen. Plan geen zware sessies vlak vóór/na PT of andere vaste sporten, "
-    "plan long runs op de voorkeursdag en respecteer vaste rustdagen."
+    "Je bent een hardloopcoach. Produceer altijd veilige, concrete plannen.\n"
+    "Regels:\n"
+    "• Gebruik de meegegeven 'weken_tot_marathon' en absolute data als waarheid.\n"
+    "• Geef NU alleen een gedetailleerd 4–6 weken mesocycle-plan.\n"
+    "• Geef daarnaast een globale roadmap tot aan de marathon (base→build→peak→taper) op maand-/fase-niveau.\n"
+    "• Taper pas in de laatste 2–3 weken vóór de marathon. Als weken_tot_marathon > 10: GEEN taper in het 4–6 weken plan.\n"
+    "• Respecteer vaste afspraken (PT, hockey), voorkeurs-langeloopdag en rustdagen.\n"
+    "• Vermijd zware sessies vlak vóór/na PT of zware sporten. Benoem blessurepreventie en alternatieven.\n"
 )
 
+# User prompt met extra achtergrond uit background.txt
 user_msg = (
-    "Hier is mijn samenvatting van recente Strava-data en doelen, plus mijn persoonlijke context "
-    "(werk/agenda, PT, hockey, voorkeuren, beperkingen). "
-    "Maak een persoonlijk advies voor de komende 4–6 weken en schets globaal de rest tot de marathon. "
-    "Respecteer vaste afspraken (PT/hockey), plan zware sessies niet vlak vóór/na PT, "
-    "plan de long run op de voorkeursdag en bewaak blessurepreventie.\n\n"
-    f"Samenvatting JSON: {json.dumps(summary, ensure_ascii=False)}\n\n"
-    f"Persoonlijk profiel JSON: {json.dumps(personal_profile, ensure_ascii=False)}"
+    "Context:\n"
+    f"- Vandaag: {today_str}\n"
+    f"- Marathondatum: {marathon_str}\n"
+    f"- Weken tot marathon: {weeks_to_go}\n\n"
+    "Opdracht:\n"
+    "1) Maak een gedetailleerd schema voor de komende 4–6 weken (mesocycle) op basis van mijn recente Strava-data en mijn profiel.\n"
+    "2) Maak daarnaast een globale planning tot aan de marathon met fases (base→build→peak→taper) en belangrijke mijlpalen (langste duurlopen), "
+    "maar plan taper uitsluitend in de laatste 2–3 weken vóór de marathondatum.\n"
+    "3) Respecteer PT/hockey/rustdagen en plan geen zware sessies vlak voor/na PT.\n\n"
+    f"Samenvatting JSON: {json.dumps(summary, ensure_ascii=False)}\n"
+    f"Persoonlijk profiel JSON: {json.dumps(personal_profile, ensure_ascii=False)}\n"
 )
+
+if background_text:
+    user_msg += f"\nAchtergrondinformatie (uit background.txt):\n{background_text}\n"
 
 with st.spinner("Coachadvies genereren met ChatGPT…"):
     completion = client.chat.completions.create(
