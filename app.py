@@ -1,4 +1,4 @@
-# app.py
+iee# app.py
 import os, json, math, time
 from datetime import datetime, timedelta, timezone
 import numpy as np, pandas as pd, requests, streamlit as st
@@ -270,7 +270,7 @@ if st.button("🧠 Persoonlijk advies genereren"):
     }
     prompt = json.dumps(payload, ensure_ascii=False, indent=2)
     st.spinner("Advies genereren met ChatGPT...")
-    system="Je bent een ervaren marathoncoach. Gebruik data, profiel en analyse om veilige, concrete trainingsaanbevelingen te geven."
+    system="Je bent een ervaren performance expert, marathoncoach en dieetexpert. Gebruik data, profiel en analyse om veilige, concrete trainingsaanbevelingen te geven inclusief een advies over het te volgen dieet."
     r = client.chat.completions.create(
         model=MODEL,
         messages=[{"role":"system","content":system},{"role":"user","content":prompt}],
@@ -279,6 +279,7 @@ if st.button("🧠 Persoonlijk advies genereren"):
     st.subheader("🏃‍♂️ Persoonlijk advies")
     st.markdown(advice)
     st.download_button("📥 Download advies (.md)",advice,file_name="marathon_advies.md")
+
 
 
 
