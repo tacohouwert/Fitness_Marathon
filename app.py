@@ -254,31 +254,59 @@ personal_profile = {
 }
 
 # =========[ ChatGPT-advies genereren ]=========
-if st.button("🧠 Persoonlijk advies genereren"):
+# =========[ Advies genereren (knop) ]=========
+st.markdown("---")
+generate = st.button("🧠 Advies genereren")
+
+if generate:
+    st.session_state.background_text = updated_background or ""
+
     summary = {
-        "km_laatste_4w": s4["km"],
-        "langste_run_4w": s4["longest"],
-        "gem_pace": s4["pace"],
-        "gem_hr": s4["hr"],
-        "weken_tot_marathon": (marathon_date - datetime.now().date()).days//7
+        "periode_weken": weeks_back,
+        "weken_tot_marathon": weeks_to_go,
+        "doel": goal,
+        "streeftijd": target_time if goal == "Tijdsspecifiek" else None,
+        "km_laatste_4w": last4["km"],
+        "langste_run_4w_km": last4["longest_km"],
+        "gem_pace_4w": last4["avg_pace"],
+        "gem_hr_4w": last4["avg_hr"],
+        "km_laatste_12w": last12["km"],
     }
-    payload = {
-        "samenvatting": summary,
-        "profiel": personal_profile,
-        "diepte": deep_insights,
-        "achtergrond": background
-    }
-    prompt = json.dumps(payload, ensure_ascii=False, indent=2)
-    st.spinner("Advies genereren met ChatGPT...")
-    system="Je bent een ervaren performance expert, marathoncoach en dieetexpert. Gebruik data, profiel en analyse om veilige, concrete trainingsaanbevelingen te geven inclusief een advies over het te volgen dieet."
-    r = client.chat.completions.create(
-        model=MODEL,
-        messages=[{"role":"system","content":system},{"role":"user","content":prompt}],
-        temperature=0.5)
-    advice = r.choices[0].message.content
-    st.subheader("🏃‍♂️ Persoonlijk advies")
+
+    system_msg = (
+        "Je bent een hardloopcoach. Produceer altijd veilige, concrete plannen.\n"
+        "Regels:\n"
+        "• Gebruik de meegegeven 'weken_tot_marathon' en absolute data als waarheid.\n"
+        "• Geef NU alleen een gedetailleerd 4–6 weken mesocycle-plan.\n"
+        "• Geef daarnaast een globale roadmap tot aan de marathon (base→build→peak→taper).\n"
+        "• Taper pas in de laatste 2–3 weken vóór de marathon.\n"
+        "• Respecteer vaste afspraken (PT, hockey), voorkeuren en rustdagen.\n"
+    )
+
+    user_msg = (
+        f"Vandaag: {today_str}\n"
+        f"Marathondatum: {marathon_str}\n"
+        f"Weken tot marathon: {weeks_to_go}\n\n"
+        f"Samenvatting JSON: {json.dumps(summary, ensure_ascii=False)}\n"
+        f"Persoonlijk profiel JSON: {json.dumps(personal_profile, ensure_ascii=False)}\n"
+        f"Achtergrondinformatie:\n{st.session_state.background_text}\n"
+    )
+
+    with st.spinner("Coachadvies genereren met ChatGPT…"):
+        completion = client.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=[{"role": "system", "content": system_msg}, {"role": "user", "content": user_msg}],
+            temperature=0.5,
+        )
+        advice = completion.choices[0].message.content
+
+    st.subheader("🧠 Persoonlijk advies (ChatGPT)")
     st.markdown(advice)
-    st.download_button("📥 Download advies (.md)",advice,file_name="marathon_advies.md")
+    st.caption("Let op: dit is geen medisch advies.")
+else:
+    st.info("Bewerk eventueel de achtergrondtekst hierboven en klik daarna op **‘Advies genereren’**.")
+
+
 
 
 
