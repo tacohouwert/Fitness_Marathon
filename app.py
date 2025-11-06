@@ -32,6 +32,44 @@ STRAVA_API_BASE = "https://www.strava.com/api/v3"
 # OpenAI client
 client = OpenAI(api_key=OPENAI_API_KEY)
 
+# =========[ Sidebar: Persoonlijk profiel (Optie A) ]=========
+with st.sidebar:
+    st.header("👤 Persoonlijk profiel")
+    pt_days = st.multiselect(
+        "PT-dagen",
+        ["maandag", "dinsdag", "woensdag", "donderdag", "vrijdag"],
+        default=["maandag", "woensdag"],
+    )
+    pt_times = st.text_input(
+        "PT tijden (bijv. ma 07:30, wo 18:00)",
+        value="ma 07:30, wo 18:00",
+    )
+
+    hockey = st.checkbox("Ik hockey op donderdag", value=True)
+    hockey_time = st.text_input("Hockey tijd", value="do 20:30–22:00")
+
+    long_run_day = st.selectbox(
+        "Voorkeursdag lange duurloop", ["zaterdag", "zondag", "vrijdag"], index=0
+    )
+    rest_days = st.multiselect(
+        "Vaste rustdag(en)",
+        ["maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag", "zondag"],
+        default=[],
+    )
+
+    st.markdown("—")
+    weekly_availability = st.text_area(
+        "Beschikbaarheid (vrije vensters)",
+        value="di 07:00–08:00, vr 12:00–13:00",
+        placeholder="Bijv. di 07:00–08:00, vr 12:00–13:00",
+    )
+    other_constraints = st.text_area(
+        "Extra context / beperkingen",
+        value="Kleine gevoeligheid achilles links; liever geen intensieve intervallen op PT-dagen.",
+        placeholder="Blessurehistorie, voorkeuren, reistijd, etc.",
+    )
+    st.caption("Dit profiel wordt meegenomen in het coach-advies.")
+
 # =========[ Helpers ]=========
 def bearer_header(token: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
@@ -184,10 +222,10 @@ def mins_to_pace_str(x):
     s = int(round((x - m) * 60))
     return f"{m}:{s:02d} /km"
 
-# =========[ UI ]=========
+# =========[ UI: parameters ]=========
 col1, col2, col3 = st.columns([1, 1, 2])
 with col1:
-    weeks_back = st.slider("Hoeveel weken terug ophalen?", 4, 26, 8)  # iets lager default om 429 te vermijden
+    weeks_back = st.slider("Hoeveel weken terug ophalen?", 4, 26, 8)  # lager default helpt tegen 429
 with col2:
     marathon_date = st.date_input(
         "Marathon datum",
@@ -243,6 +281,18 @@ mcol1.metric("Km (laatste 4w)", last4["km"])
 mcol2.metric("Langste run (km, 4w)", last4["longest_km"])
 mcol3.metric("Weken tot marathon", max(weeks_to_go, 0))
 
+# =========[ Profiel → dict ]=========
+personal_profile = {
+    "pt_days": pt_days,
+    "pt_times": pt_times,
+    "hockey_thursday": hockey,
+    "hockey_time": hockey_time,
+    "preferred_long_run_day": long_run_day,
+    "rest_days": rest_days,
+    "availability": weekly_availability,
+    "extra_constraints": other_constraints,
+}
+
 # =========[ ChatGPT-advies ]=========
 summary = {
     "periode_weken": weeks_back,
@@ -257,17 +307,22 @@ summary = {
 }
 
 system_msg = (
-    "Je bent een hardloopcoach die op basis van recente trainingsdata een concreet, "
+    "Je bent een hardloopcoach die op basis van recente trainingsdata en persoonlijke context een concreet, "
     "veilig en persoonlijk advies geeft voor een marathonvoorbereiding. "
     "Houd rekening met geleidelijke opbouw (ca. 5–10% per week), periodisering (base → build → peak → taper), "
     "en blessurepreventie. Geef weekschema-blokken (range), richttempo’s als % van recente pace, "
-    "en concrete long-run doelen. Benoem wanneer rust/crosstraining verstandig is."
+    "en concrete long-run doelen. Plan geen zware sessies vlak vóór/na PT of andere vaste sporten, "
+    "plan long runs op de voorkeursdag en respecteer vaste rustdagen."
 )
 
 user_msg = (
-    "Hier is mijn samenvatting van recente Strava-data en doelen. "
-    "Maak een persoonlijk advies voor de komende 4–6 weken, en schets globaal de rest tot de marathon. "
-    f"Samenvatting JSON: {json.dumps(summary, ensure_ascii=False)}"
+    "Hier is mijn samenvatting van recente Strava-data en doelen, plus mijn persoonlijke context "
+    "(werk/agenda, PT, hockey, voorkeuren, beperkingen). "
+    "Maak een persoonlijk advies voor de komende 4–6 weken en schets globaal de rest tot de marathon. "
+    "Respecteer vaste afspraken (PT/hockey), plan zware sessies niet vlak vóór/na PT, "
+    "plan de long run op de voorkeursdag en bewaak blessurepreventie.\n\n"
+    f"Samenvatting JSON: {json.dumps(summary, ensure_ascii=False)}\n\n"
+    f"Persoonlijk profiel JSON: {json.dumps(personal_profile, ensure_ascii=False)}"
 )
 
 with st.spinner("Coachadvies genereren met ChatGPT…"):
