@@ -165,15 +165,15 @@ if deep:
         tiz=time_in_zones(streams.get("heartrate",{}).get("data"), zones)
         drifts.append({"date":r["start_date_local"],"hr_drift":drift,**tiz})
     ddf=pd.DataFrame(drifts).dropna(subset=["hr_drift"])
-    if not ddf.empty:
-        st.subheader("🔬 HR-drift per run (%)")
-        st.dataframe(ddf.style.background_gradient(subset=["hr_drift"], cmap="coolwarm"))
-        fig,ax=plt.subplots()
-        ax.plot(ddf["date"],ddf["hr_drift"],"o-")
-        ax.axhline(5,color="g",ls="--"); ax.axhline(10,color="r",ls="--")
-        ax.set_ylabel("HR-drift (%)"); ax.grid(True)
-        st.pyplot(fig)
-        deep_insights["gem_hr_drift"] = round(ddf["hr_drift"].mean(),1)
+ #   if not ddf.empty:
+ #       st.subheader("🔬 HR-drift per run (%)")
+ #       st.dataframe(ddf.style.background_gradient(subset=["hr_drift"], cmap="coolwarm"))
+ #       fig,ax=plt.subplots()
+ #       ax.plot(ddf["date"],ddf["hr_drift"],"o-")
+ #       ax.axhline(5,color="g",ls="--"); ax.axhline(10,color="r",ls="--")
+ #       ax.set_ylabel("HR-drift (%)"); ax.grid(True)
+ #       st.pyplot(fig)
+ #       deep_insights["gem_hr_drift"] = round(ddf["hr_drift"].mean(),1)
 
 # =========[ Persoonlijk profiel opslaan voor ChatGPT ]=========
 personal_profile = {
@@ -213,5 +213,6 @@ if st.button("🧠 Persoonlijk advies genereren"):
     st.subheader("🏃‍♂️ Persoonlijk advies")
     st.markdown(advice)
     st.download_button("📥 Download advies (.md)",advice,file_name="marathon_advies.md")
+
 
 
