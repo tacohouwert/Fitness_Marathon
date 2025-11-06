@@ -1,4 +1,4 @@
-iee# app.py
+# app.py
 import os, json, math, time
 from datetime import datetime, timedelta, timezone
 import numpy as np, pandas as pd, requests, streamlit as st
@@ -279,6 +279,7 @@ if st.button("🧠 Persoonlijk advies genereren"):
     st.subheader("🏃‍♂️ Persoonlijk advies")
     st.markdown(advice)
     st.download_button("📥 Download advies (.md)",advice,file_name="marathon_advies.md")
+
 
 
 
