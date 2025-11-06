@@ -132,6 +132,45 @@ with st.spinner("📡 Strava-data ophalen..."):
     acts = fetch_activities(access, after)
 if acts.empty: st.warning("Geen activiteiten gevonden."); st.stop()
 
+# ---- Samenvatting per sporttype (voor de hele ingelezen periode) ----
+def _agg_by_type(df: pd.DataFrame) -> dict:
+    if df.empty:
+        return {}
+    g = (
+        df.groupby("sport_type")
+          .agg(
+              sessions=("id", "count"),
+              distance_km=("distance_km", "sum"),
+              moving_sec=("moving_time", "sum"),
+              elev_m=("total_elevation_gain", "sum"),
+          )
+          .fillna(0)
+    )
+    g["hours"] = (g["moving_sec"] / 3600.0)
+    # ronden en naar nested dict
+    g = g[["sessions", "distance_km", "hours", "elev_m"]].round({"distance_km": 1, "hours": 2, "elev_m": 0})
+    return g.to_dict(orient="index")
+
+# Periode die jij hebt ingelezen (weeks_back)
+by_type_total = _agg_by_type(acts)
+
+# Optioneel: alleen de laatste 4 weken (ongeacht weeks_back)
+acts_4w_all = acts[acts["start_date_local"] >= (datetime.now(timezone.utc) - timedelta(weeks=4))]
+by_type_last4 = _agg_by_type(acts_4w_all)
+
+# UI: onder een expander tonen (optioneel)
+st.subheader("📊 Mix per sporttype")
+with st.expander("Toon verdeling per sporttype (afgelopen periode en laatste 4 weken)"):
+    if by_type_total:
+        st.write("**Ingelezen periode (weeks_back):**")
+        st.json(by_type_total)
+    else:
+        st.write("Geen data voor de ingelezen periode.")
+    if by_type_last4:
+        st.write("**Laatste 4 weken:**")
+        st.json(by_type_last4)
+
+
 # =========[ Overzicht van recente Strava-activiteiten ]=========
 if not acts.empty:
     st.subheader("📋 Strava-activiteiten")
@@ -275,7 +314,12 @@ if generate:
         "gem_pace_4w_min_per_km": s4["pace"],
         "gem_hr_4w": s4["hr"],
         "km_laatste_12w": s12["km"],
+    
+        # 🔥 Nieuw: sport-mix (Optie B)
+        "activiteiten_per_type": by_type_total,        # totale mix in de ingelezen periode
+        "activiteiten_per_type_4w": by_type_last4,     # mix laatste 4 weken
     }
+
 
     # Strikte systeemprompt om verkeerde aannames te voorkomen
     system_msg = (
@@ -290,18 +334,21 @@ if generate:
         "Vermijd zware sessies vlak voor/na PT en geef blessurepreventie mee.\n"
         "5) Noem expliciet: 'Er zijn X weken tot de marathon op YYYY-MM-DD', waarbij X de aangeleverde waarde is."
          "6) Voeg een dieetadvies toe per week met conrete aanbevelingen voor ontbijt, lunch en diner inclusief calorie, eiwit, koolhydraat en vetinname zoals een dietist dit zou doen."
+        "7) Gebruik 'activiteiten_per_type' en 'activiteiten_per_type_4w' om cross-training (bijv. Ride, Workout) te wegen in herstel en belastingsadvies; pas hardloopsessies hierop aan."
+
     )
 
     # Gebruikersbericht met expliciete waarde-injectie (we geven X letterlijk mee)
     user_payload = {
         "vandaag": today_str,
         "marathondatum": marathon_str,
-        "weken_tot_marathon": weeks_to_go,          # <- expliciet en leidend
-        "samenvatting": summary,
+        "weken_tot_marathon": weeks_to_go,
+        "samenvatting": summary,            # <-- bevat nu ook de sport-mix
         "profiel": personal_profile,
-        "diepte_analyse": deep_insights,            # bv. gem_hr_drift
+        "diepte_analyse": deep_insights,
         "achtergrond": background
     }
+
     user_msg = json.dumps(user_payload, ensure_ascii=False, indent=2)
 
     with st.spinner("Coachadvies genereren met ChatGPT…"):
@@ -322,6 +369,7 @@ if generate:
     )
 else:
     st.info("Bewerk eventueel de achtergrondtekst hierboven en klik daarna op **‘Advies genereren’**.")
+
 
 
 
