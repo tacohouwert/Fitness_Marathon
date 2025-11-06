@@ -43,11 +43,11 @@ with st.sidebar:
     )
     pt_times = st.text_input(
         "PT tijden (bijv. ma 07:30, wo 18:00)",
-        value="ma 07:30, wo 18:00",
+        value="ma 20:00, wo 18:45",
     )
 
     hockey = st.checkbox("Ik hockey op donderdag", value=True)
-    hockey_time = st.text_input("Hockey tijd", value="do 20:30–22:00")
+    hockey_time = st.text_input("Hockey tijd", value="do 20:00–21:30")
 
     long_run_day = st.selectbox(
         "Voorkeursdag lange duurloop", ["zaterdag", "zondag", "vrijdag"], index=0
@@ -66,7 +66,7 @@ with st.sidebar:
     )
     other_constraints = st.text_area(
         "Extra context / beperkingen",
-        value="Kleine gevoeligheid achilles links; liever geen intensieve intervallen op PT-dagen.",
+        value="Liever geen intensieve intervallen op PT-dagen.",
         placeholder="Blessurehistorie, voorkeuren, reistijd, etc.",
     )
     st.caption("Dit profiel wordt meegenomen in het coach-advies.")
@@ -370,3 +370,4 @@ st.markdown(advice)
 st.caption(
     "Let op: dit is geen medisch advies. Luister naar je lichaam en raadpleeg een professional bij klachten."
 )
+
