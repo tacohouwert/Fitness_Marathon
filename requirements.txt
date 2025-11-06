@@ -4,3 +4,4 @@ pandas
 python-dateutil
 openai
 numpy
+matplotlib
