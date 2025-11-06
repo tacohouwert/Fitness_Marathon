@@ -3,3 +3,4 @@ requests
 pandas
 python-dateutil
 openai
+numpy
