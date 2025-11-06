@@ -289,6 +289,7 @@ if generate:
         "4) Respecteer vaste afspraken (PT, hockey), voorkeurs-langeloopdag en rustdagen. "
         "Vermijd zware sessies vlak voor/na PT en geef blessurepreventie mee.\n"
         "5) Noem expliciet: 'Er zijn X weken tot de marathon op YYYY-MM-DD', waarbij X de aangeleverde waarde is."
+         "6) Voeg een dieetadvies toe per week met conrete aanbevelingen voor ontbijt, lunch en diner inclusief calorie, eiwit, koolhydraat en vetinname zoals een dietist dit zou doen."
     )
 
     # Gebruikersbericht met expliciete waarde-injectie (we geven X letterlijk mee)
@@ -321,6 +322,7 @@ if generate:
     )
 else:
     st.info("Bewerk eventueel de achtergrondtekst hierboven en klik daarna op **‘Advies genereren’**.")
+
 
 
 
