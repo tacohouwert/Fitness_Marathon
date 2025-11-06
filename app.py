@@ -132,7 +132,33 @@ with st.spinner("📡 Strava-data ophalen..."):
     acts = fetch_activities(access, after)
 if acts.empty: st.warning("Geen activiteiten gevonden."); st.stop()
 
-st.dataframe(acts[["start_date_local","name","distance_km","pace","average_heartrate","total_elevation_gain"]])
+# =========[ Overzicht van recente Strava-activiteiten ]=========
+if not acts.empty:
+    st.subheader("📋 Strava-activiteiten")
+
+    with st.expander("🏃 Toon recente activiteiten (klik om te openen)"):
+        st.dataframe(
+            acts[
+                [
+                    "start_date_local",
+                    "name",
+                    "sport_type",
+                    "distance_km",
+                    "pace",
+                    "average_heartrate",
+                    "total_elevation_gain",
+                ]
+            ],
+            use_container_width=True,
+        )
+        st.caption(
+            "Hier zie je je recente activiteiten die uit Strava zijn opgehaald. "
+            "De lijst bevat afstand (km), tempo, gemiddelde hartslag en hoogtemeters. "
+            "Klik op de kolomkoppen om te sorteren."
+        )
+else:
+    st.warning("Geen activiteiten gevonden in de geselecteerde periode.")
+
 
 # =========[ Samenvatting (UTC fix) ]=========
 def summary_block(df, w=4):
@@ -253,6 +279,7 @@ if st.button("🧠 Persoonlijk advies genereren"):
     st.subheader("🏃‍♂️ Persoonlijk advies")
     st.markdown(advice)
     st.download_button("📥 Download advies (.md)",advice,file_name="marathon_advies.md")
+
 
 
 
