@@ -346,6 +346,7 @@ if generate:
         "5) Noem expliciet: 'Er zijn X weken tot de marathon op YYYY-MM-DD', waarbij X de aangeleverde waarde is."
          "6) Voeg een dieetadvies toe per week met conrete aanbevelingen voor ontbijt, lunch en diner inclusief calorie, eiwit, koolhydraat en vetinname zoals een dietist dit zou doen."
         "7) Gebruik 'activiteiten_per_type' en 'activiteiten_per_type_4w' om cross-training (bijv. Ride, Workout) te wegen in herstel en belastingsadvies; pas hardloopsessies hierop aan."
+        "8) Geef ook een analyse van de laatste activiteit in Strava"
 
     )
 
@@ -380,6 +381,7 @@ if generate:
     )
 else:
     st.info("Bewerk eventueel de achtergrondtekst hierboven en klik daarna op **‘Advies genereren’**.")
+
 
 
 
